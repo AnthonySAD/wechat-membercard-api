@@ -26,7 +26,7 @@ trait Validator
         }
 
         foreach ($rules as $key => $value){
-            !isset($request[$key]) || empty($request[$key]) || $data[$key] = $request[$key];
+            !isset($request[$key]) || $request[$key] == '' || $data[$key] = $request[$key];
         }
         if (!isset($data)){
             throw new ApiException(ErrorCodes::BAD_REQUEST);

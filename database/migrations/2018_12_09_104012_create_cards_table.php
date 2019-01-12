@@ -22,10 +22,12 @@ class CreateCardsTable extends Migration
             $table->string('info', 100)->default('');
             $table->string('avatar')->default('');
             $table->string('color', 7)->default('');
+            $table->tinyInteger('code_type')->default(0);
             $table->softDeletes();
             $table->timestamps();
 
             $table->index('user_id');
+            $table->index('type_id');
         });
     }
 

@@ -24,7 +24,7 @@ class CardController extends Controller
 {
     use Validator;
 
-    private $shareExpires = 864000;
+    private $shareExpires = 604800;
 
 
     /**
@@ -57,10 +57,10 @@ class CardController extends Controller
      */
     public function getMyCard(Request $request)
     {
-        $cards = UserCardRelation::with(['cardInfo:id,code,color,info,avatar,name'])
+        $cards = UserCardRelation::with(['cardInfo:id,code,color,info,avatar,name,code_type'])
             ->where('user_id', $request->userId)
             ->orderByDesc('rank')
-            ->get(['rank','card_id','type','code_type']);
+            ->get(['rank','card_id','type']);
 
         if ($cards->isEmpty()){
             return $this->noContent();
@@ -174,14 +174,11 @@ class CardController extends Controller
             'info'=>'nullable|string|max:50',
             'color'=>'required|regex:/^#[\da-fA-F]{6}$/',
             'type_id'=>'required|integer',
+            'code_type'=>'required|in:0,1',
         ];
 
         $data = $this->easyValidator($request, $rules);
-        $codeType = $request->input('code_type', 0);
-        if (!in_array($codeType, [0, 1])){
-            throw new ApiException(ErrorCodes::BAD_REQUEST);
-        }
-        if(isset($data['type_id'])){
+        if($data['type_id'] != 0){
             $cardType = CardType::find($data['type_id']);
             if (!$cardType){
                 throw new ApiException(ErrorCodes::BAD_REQUEST);
@@ -206,17 +203,16 @@ class CardController extends Controller
             'user_id'=>$request->userId,
             'card_id'=>$card->id,
             'rank'=>$rank,
-            'code_type'=>$codeType
         ]);
 
         return $this->ok([
             'rank'=>$rank,
             'card_id'=>$card->id,
             'type'=>0,
-            'code_type'=>$codeType,
             'card_info'=>[
                 'avatar'=>$data['avatar'],
                 'code'=>$data['code'],
+                'code_type'=>$data['code_type'],
                 'color'=>$data['color'],
                 'name'=>$data['name'],
                 'info'=>isset($data['info']) ? $data['info']: '',
@@ -275,9 +271,12 @@ class CardController extends Controller
     public function changeCard(Request $request)
     {
         $rules = [
-            'code'=>'nullable|string|min:4|max:30',
+            'name'=>'required|string|min:2|max:12',
+            'code'=>'required|alpha_num|min:4|max:22',
             'info'=>'nullable|string|max:50',
-            'color'=>'nullable|regex:/^#[\da-f]{6}$/',
+            'color'=>'required|regex:/^#[\da-fA-F]{6}$/',
+            'type_id'=>'required|integer',
+            'code_type'=>'required|in:0,1',
         ];
 
         $data = $this->easyValidator($request, $rules);
@@ -287,9 +286,14 @@ class CardController extends Controller
         if (!$card){
             throw new ApiException(ErrorCodes::BAD_REQUEST, 'invalid card');
         }
-        $card->fill($data);
-        $card->save();
-        return $this->ok();
+        $card->update($data);
+        return $this->ok([
+            'code'=>$data['code'],
+            'code_type'=>$data['code_type'],
+            'color'=>$data['color'],
+            'name'=>$data['name'],
+            'info'=>isset($data['info']) ? $data['info']: '',
+        ]);
     }
 
     /**
@@ -477,14 +481,42 @@ class CardController extends Controller
         $hasCard = UserCardRelation::where('card_id', $cardId)
             ->where('user_id', $request->userId)
             ->first();
+
         if ($hasCard){
             throw new ApiException(ErrorCodes::CARD_OWNED, 'card already owned');
         }
 
         \Redis::del('share_card_' . $cardToken);
-        UserCardRelation::create(['card_id'=>$cardId, 'user_id'=>$request->userId, 'type'=>1]);
+        $lastCardRank = UserCardRelation::where('user_id', $request->userId)
+            ->orderByDesc('rank')
+            ->first();
 
-        return $this->ok();
+        if (!$lastCardRank){
+            $rank = 0;
+        }else{
+            $rank = ++ $lastCardRank->rank;
+        }
+
+        UserCardRelation::create([
+            'card_id'=>$cardId,
+            'user_id'=>$request->userId,
+            'type'=>1,
+            'rank'=>$rank
+        ]);
+
+        return $this->ok([
+            'rank'=>$rank,
+            'card_id'=>$card->id,
+            'type'=>1,
+            'card_info'=>[
+                'avatar'=>$card->avatar,
+                'code'=>$card->code,
+                'code_type'=>$card->code_type,
+                'color'=>$card->color,
+                'name'=>$card->name,
+                'info'=>$card->info,
+            ]
+        ]);
     }
 
     /**

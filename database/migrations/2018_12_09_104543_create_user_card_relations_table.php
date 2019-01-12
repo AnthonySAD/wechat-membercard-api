@@ -19,7 +19,6 @@ class CreateUserCardRelationsTable extends Migration
             $table->integer('card_id');
             $table->integer('rank')->default(0);
             $table->tinyInteger('type')->default(0);
-            $table->tinyInteger('code_type')->default(0);
             $table->softDeletes();
             $table->timestamps();
 
